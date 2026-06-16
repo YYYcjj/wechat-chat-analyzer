@@ -48,25 +48,40 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
 .msg-sender { font-size:13px; font-weight:600; color:#07c160; min-width:80px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .msg-content { font-size:14px; color:#333; flex:1; word-break:break-all; line-height:1.5; }
 
-.word-cloud-section { margin-bottom:24px; }
-
-.export-bar { text-align:center; margin-bottom:24px; }
+.export-bar { text-align:center; margin-bottom:24px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
 .btn { padding:10px 24px; border-radius:8px; font-size:14px; border:none; cursor:pointer; font-weight:500; transition:all .2s; }
 .btn-primary { background:#07c160; color:#fff; }
 .btn-primary:hover { background:#06ae56; }
 .btn-outline { background:#fff; color:#07c160; border:1px solid #07c160; }
 .btn-outline:hover { background:#f0faf4; }
+.btn-accent { background:#576b95; color:#fff; }
+.btn-accent:hover { background:#4a5d82; }
+.btn-warn { background:#f5a623; color:#fff; }
+.btn-warn:hover { background:#e09510; }
 
 .empty-state { text-align:center; padding:60px 20px; color:#bbb; }
 .empty-state .big-icon { font-size:72px; margin-bottom:16px; }
 
-.tabs { display:flex; gap:4px; margin-bottom:16px; }
-.tab { padding:8px 20px; border-radius:8px; font-size:14px; cursor:pointer; border:none; background:#f5f5f5; color:#666; transition:all .2s; }
-.tab.active { background:#07c160; color:#fff; }
+/* Word Cloud */
+.word-cloud-canvas { width:100%; border-radius:8px; background:#fafbfc; }
 
-.keyword-list { display:flex; flex-wrap:wrap; gap:8px; }
-.keyword-tag { padding:6px 14px; background:#f0faf4; color:#07c160; border-radius:20px; font-size:13px; }
-.keyword-tag .count { color:#999; margin-left:4px; font-size:11px; }
+/* Sentiment */
+.sentiment-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:16px; }
+.sentiment-card { text-align:center; padding:20px; border-radius:12px; }
+.sentiment-card .s-label { font-size:13px; margin-bottom:4px; }
+.sentiment-card .s-value { font-size:28px; font-weight:700; }
+.sentiment-card .s-pct { font-size:12px; opacity:.7; margin-top:4px; }
+.sentiment-positive { background:#f0faf4; color:#07c160; }
+.sentiment-neutral { background:#f5f7fa; color:#576b95; }
+.sentiment-negative { background:#fff5f5; color:#e74c3c; }
+
+.sentiment-person-row { display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid #f5f5f5; }
+.sentiment-person-name { min-width:80px; font-size:13px; font-weight:500; }
+.sentiment-bar-wrap { flex:1; height:20px; background:#f0f0f0; border-radius:10px; overflow:hidden; display:flex; }
+.sentiment-bar-pos { background:#07c160; transition:width .5s; }
+.sentiment-bar-neu { background:#c0c4cc; transition:width .5s; }
+.sentiment-bar-neg { background:#e74c3c; transition:width .5s; }
+.sentiment-person-score { font-size:12px; color:#999; min-width:50px; text-align:right; }
 
 .emoji-list { display:flex; flex-wrap:wrap; gap:12px; }
 .emoji-item { font-size:24px; padding:8px 12px; background:#fafafa; border-radius:8px; display:flex; align-items:center; gap:8px; }
@@ -93,7 +108,24 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
   </div>
 
   <div id="dashboard" style="display:none;">
+    <div class="export-bar">
+      <button class="btn btn-primary" onclick="exportReport()">📄 导出分析报告</button>
+      <button class="btn btn-outline" onclick="location.reload()">🔄 重新上传</button>
+    </div>
+
     <div class="stats-grid" id="statsGrid"></div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>😊 情感分析总览</h3>
+        <div class="sentiment-grid" id="sentimentOverview"></div>
+        <div id="sentimentPersonList"></div>
+      </div>
+      <div class="chart-card">
+        <h3>☁️ 高频词云</h3>
+        <canvas id="wordCloud" class="word-cloud-canvas" width="600" height="400"></canvas>
+      </div>
+    </div>
 
     <div class="charts-row">
       <div class="chart-card">
@@ -117,11 +149,6 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
       </div>
     </div>
 
-    <div class="chart-card full-width word-cloud-section">
-      <h3>🔤 高频关键词</h3>
-      <div class="keyword-list" id="keywordList"></div>
-    </div>
-
     <div class="chart-card full-width" style="margin-bottom:24px;">
       <h3>😀 常用表情/Emoji</h3>
       <div class="emoji-list" id="emojiList"></div>
@@ -137,6 +164,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
               <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">消息数</th>
               <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">占比</th>
               <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">平均长度</th>
+              <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">😊情感</th>
               <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">图片/文件</th>
               <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">首条时间</th>
               <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">末条时间</th>
@@ -155,10 +183,6 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
       </div>
       <div class="msg-list" id="msgList"></div>
     </div>
-
-    <div class="export-bar">
-      <button class="btn btn-outline" onclick="location.reload()">🔄 重新上传</button>
-    </div>
   </div>
 </div>
 
@@ -167,8 +191,9 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
 <script>
 let allMessages = [];
 let charts = {};
+let globalStats = null;
 
-// --- File Upload ---
+// ==================== FILE UPLOAD ====================
 const zone = document.getElementById('uploadZone');
 const input = document.getElementById('fileInput');
 
@@ -190,15 +215,10 @@ function handleFile(file) {
   reader.readAsText(file, 'UTF-8');
 }
 
-// --- Parser ---
+// ==================== PARSER ====================
 function parseWeChat(text) {
   allMessages = [];
   const lines = text.split('\n');
-  
-  // Pattern 1: 2024-01-15 14:30:25 张三
-  // Pattern 2: 1/15/24 14:30:25 张三
-  // Pattern 3: 2024-01-15 14:30:25 张三: message (with colon)
-  // Pattern 4: 张三 2024-01-15 14:30:25
   
   const timePatterns = [
     /^(\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}:\d{2})\s+(.+?)(?:\s*$)/,
@@ -222,7 +242,6 @@ function parseWeChat(text) {
         let sender = m[2].trim();
         let content = m[3] ? m[3].trim() : '';
         
-        // If sender contains colon separator
         if (!content && sender.includes('：')) {
           const idx = sender.indexOf('：');
           content = sender.substring(idx + 1).trim();
@@ -233,14 +252,9 @@ function parseWeChat(text) {
           sender = sender.substring(0, idx).trim();
         }
         
-        // Remove trailing colon from sender
         sender = sender.replace(/[：:]$/, '').trim();
         
-        current = {
-          time: parseTime(m[1]),
-          sender: sender,
-          content: content || '',
-        };
+        current = { time: parseTime(m[1]), sender, content: content || '' };
         matched = true;
         break;
       }
@@ -252,7 +266,6 @@ function parseWeChat(text) {
   }
   if (current && current.sender) allMessages.push(current);
   
-  // Clean: filter out system messages
   allMessages = allMessages.filter(m => m.sender && m.sender.length > 0 && m.sender.length < 50);
   
   if (allMessages.length === 0) {
@@ -265,11 +278,8 @@ function parseWeChat(text) {
 }
 
 function parseTime(str) {
-  // Try various formats
   let d = new Date(str.replace(/\//g, '-'));
   if (!isNaN(d.getTime())) return d;
-  
-  // Try MM/DD/YY format
   const m2 = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (m2) {
     const year = m2[3].length === 2 ? '20' + m2[3] : m2[3];
@@ -278,7 +288,39 @@ function parseTime(str) {
   return new Date();
 }
 
-// --- Stats ---
+// ==================== SENTIMENT ====================
+const POSITIVE_WORDS = new Set([
+  '哈哈','哈哈哈','嘿嘿','嘻嘻','开心','高兴','快乐','幸福','爽','棒','好','太好了','真好','不错','赞','厉害','牛','牛逼','优秀','完美','喜欢','爱','可爱','好看','漂亮','帅','谢谢','感谢','感恩','感动','温暖','舒服','期待','希望','加油','冲','嗨','耶','哇','嗯嗯','好的','OK','ok','👍','nice','great','good','awesome'
+]);
+
+const NEGATIVE_WORDS = new Set([
+  '唉','哎','烦','讨厌','恶心','气','生气','愤怒','难过','伤心','哭','崩溃','累','疲惫','无聊','差','烂','糟糕','垃圾','傻逼','sb','无语','呵呵','不想','不行','不能','没有','没办法','太难了','不舒服','焦虑','紧张','害怕','担心','后悔','失望','绝望','疼','痛','死了','醉了','算了','随便','MD','tm'
+]);
+
+function analyzeSentiment(text) {
+  const cleaned = text.replace(/\[[^\]]+\]/g, '').toLowerCase();
+  let posCount = 0, negCount = 0;
+  
+  for (const w of POSITIVE_WORDS) {
+    const re = new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+    const matches = cleaned.match(re);
+    if (matches) posCount += matches.length;
+  }
+  for (const w of NEGATIVE_WORDS) {
+    const re = new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+    const matches = cleaned.match(re);
+    if (matches) negCount += matches.length;
+  }
+  
+  const total = posCount + negCount;
+  if (total === 0) return { label: '中性', score: 0, type: 'neutral' };
+  const score = (posCount - negCount) / (posCount + negCount);
+  if (score > 0.1) return { label: '积极', score, type: 'positive' };
+  if (score < -0.1) return { label: '消极', score, type: 'negative' };
+  return { label: '中性', score: 0, type: 'neutral' };
+}
+
+// ==================== STATS ====================
 function getStats() {
   const senders = {};
   const daily = {};
@@ -286,37 +328,39 @@ function getStats() {
   const weekly = new Array(7).fill(0);
   const words = {};
   const emojis = {};
+  const sentiment = { positive: 0, neutral: 0, negative: 0 };
+  const personSentiment = {};
   let imgCount = 0;
   
   for (const m of allMessages) {
-    // Sender stats
     if (!senders[m.sender]) senders[m.sender] = { count:0, totalLen:0, first:null, last:null, images:0 };
+    if (!personSentiment[m.sender]) personSentiment[m.sender] = { pos:0, neu:0, neg:0, scores:[] };
+    
     senders[m.sender].count++;
     senders[m.sender].totalLen += m.content.length;
     const t = m.time;
     if (!senders[m.sender].first || t < senders[m.sender].first) senders[m.sender].first = t;
     if (!senders[m.sender].last || t > senders[m.sender].last) senders[m.sender].last = t;
     
-    // Daily
     const day = toDateStr(t);
     daily[day] = (daily[day] || 0) + 1;
-    
-    // Hourly
     hourly[t.getHours()]++;
-    
-    // Weekly
     weekly[t.getDay()]++;
     
-    // Check for images/files
     if (/\[图片\]|\[照片\]|\[文件\]|\[视频\]|\[语音\]|<img|\[Image\]|\[Photo\]|\[File\]|\[Video\]/i.test(m.content)) {
       senders[m.sender].images++;
       imgCount++;
     }
     
-    // Word frequency (Chinese + English)
+    // Sentiment
+    const s = analyzeSentiment(m.content);
+    sentiment[s.type]++;
+    personSentiment[m.sender][s.type]++;
+    personSentiment[m.sender].scores.push(s.score);
+    
+    // Word frequency
     const text = m.content.replace(/\[[^\]]+\]/g, '').trim();
     if (text) {
-      // Chinese words (bigram)
       const cleaned = text.replace(/[^\u4e00-\u9fff\w]/g, '');
       for (let i = 0; i < cleaned.length - 1; i++) {
         const bigram = cleaned.substring(i, i+2);
@@ -324,26 +368,21 @@ function getStats() {
           words[bigram] = (words[bigram] || 0) + 1;
         }
       }
-      // English words
       const engWords = text.match(/[a-zA-Z]{2,}/g);
       if (engWords) {
         for (const w of engWords) {
-          const lw = w.toLowerCase();
-          words[lw] = (words[lw] || 0) + 1;
+          words[w.toLowerCase()] = (words[w.toLowerCase()] || 0) + 1;
         }
       }
     }
     
-    // Emojis
     const emojiMatches = text.match(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu);
     if (emojiMatches) {
-      for (const e of emojiMatches) {
-        emojis[e] = (emojis[e] || 0) + 1;
-      }
+      for (const e of emojiMatches) emojis[e] = (emojis[e] || 0) + 1;
     }
   }
   
-  return { senders, daily, hourly, weekly, words, emojis, imgCount };
+  return { senders, daily, hourly, weekly, words, emojis, imgCount, sentiment, personSentiment };
 }
 
 function toDateStr(d) {
@@ -352,15 +391,73 @@ function toDateStr(d) {
 
 const weekLabels = ['周日','周一','周二','周三','周四','周五','周六'];
 
-// --- Render ---
+// ==================== WORD CLOUD ====================
+function drawWordCloud(stats) {
+  const canvas = document.getElementById('wordCloud');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = 600, H = 400;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = '100%';
+  canvas.style.height = 'auto';
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  
+  const sorted = Object.entries(stats.words).sort((a,b) => b[1] - a[1]).slice(0, 80);
+  if (sorted.length === 0) return;
+  
+  const maxCount = sorted[0][1];
+  const minCount = sorted[sorted.length - 1][1];
+  const colors = ['#07c160','#06ae56','#576b95','#f5a623','#e74c3c','#1abc9c','#9b59b6','#3498db','#2ecc71','#e91e63'];
+  
+  const placed = [];
+  
+  function overlaps(x, y, w, h, pad) {
+    for (const r of placed) {
+      if (x + w + pad > r.x - pad && x - pad < r.x + r.w + pad &&
+          y + h + pad > r.y - pad && y - pad < r.y + r.h + pad) return true;
+    }
+    return false;
+  }
+  
+  for (const [word, count] of sorted) {
+    const ratio = (count - minCount) / (maxCount - minCount || 1);
+    const fontSize = 12 + ratio * 44;
+    ctx.font = `bold ${fontSize}px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif`;
+    const metrics = ctx.measureText(word);
+    const tw = metrics.width;
+    const th = fontSize * 1.2;
+    
+    let placed_ok = false;
+    for (let r = 0; r < Math.max(W, H) * 2 && !placed_ok; r += 2) {
+      for (let angle = 0; angle < Math.PI * 2 && !placed_ok; angle += 0.3) {
+        const cx = W / 2 + r * Math.cos(angle) * (W / H);
+        const cy = H / 2 + r * Math.sin(angle);
+        const x = cx - tw / 2;
+        const y = cy - th / 2;
+        if (x > 10 && y > 10 && x + tw < W - 10 && y + th < H - 10 && !overlaps(x, y, tw, th, 2)) {
+          ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+          ctx.fillText(word, x, y + th * 0.8);
+          placed.push({ x, y, w: tw, h: th });
+          placed_ok = true;
+        }
+      }
+    }
+  }
+}
+
+// ==================== RENDER ====================
 function renderAll() {
   const stats = getStats();
+  globalStats = stats;
   renderStats(stats);
+  renderSentiment(stats);
+  drawWordCloud(stats);
   renderDailyChart(stats);
   renderPersonChart(stats);
   renderHourlyChart(stats);
   renderWeeklyChart(stats);
-  renderKeywords(stats);
   renderEmojis(stats);
   renderPersonTable(stats);
   renderMessages(stats);
@@ -372,14 +469,60 @@ function renderStats(stats) {
   const firstDay = days[0] || '-';
   const lastDay = days[days.length-1] || '-';
   
-  const html = `
+  document.getElementById('statsGrid').innerHTML = `
     <div class="stat-card"><div class="label">📨 总消息数</div><div class="value">${allMessages.length.toLocaleString()}</div><div class="sub">条消息</div></div>
     <div class="stat-card"><div class="label">👥 参与人数</div><div class="value">${senders.length}</div><div class="sub">位成员</div></div>
     <div class="stat-card"><div class="label">📅 聊天跨度</div><div class="value">${days.length}</div><div class="sub">天 (${firstDay} ~ ${lastDay})</div></div>
     <div class="stat-card"><div class="label">📷 图片/文件</div><div class="value">${stats.imgCount.toLocaleString()}</div><div class="sub">条媒体消息</div></div>
     <div class="stat-card"><div class="label">💬 日均消息</div><div class="value">${Math.round(allMessages.length / Math.max(days.length,1))}</div><div class="sub">条/天</div></div>
   `;
-  document.getElementById('statsGrid').innerHTML = html;
+}
+
+function renderSentiment(stats) {
+  const total = allMessages.length;
+  const pPos = ((stats.sentiment.positive / total) * 100).toFixed(1);
+  const pNeu = ((stats.sentiment.neutral / total) * 100).toFixed(1);
+  const pNeg = ((stats.sentiment.negative / total) * 100).toFixed(1);
+  
+  document.getElementById('sentimentOverview').innerHTML = `
+    <div class="sentiment-card sentiment-positive">
+      <div class="s-label">😊 积极消息</div>
+      <div class="s-value">${stats.sentiment.positive.toLocaleString()}</div>
+      <div class="s-pct">${pPos}%</div>
+    </div>
+    <div class="sentiment-card sentiment-neutral">
+      <div class="s-label">😐 中性消息</div>
+      <div class="s-value">${stats.sentiment.neutral.toLocaleString()}</div>
+      <div class="s-pct">${pNeu}%</div>
+    </div>
+    <div class="sentiment-card sentiment-negative">
+      <div class="s-label">😞 消极消息</div>
+      <div class="s-value">${stats.sentiment.negative.toLocaleString()}</div>
+      <div class="s-pct">${pNeg}%</div>
+    </div>
+  `;
+  
+  // Per-person sentiment bars
+  const senders = Object.keys(stats.personSentiment).sort((a,b) => 
+    (stats.senders[b].count) - (stats.senders[a].count)
+  );
+  const html = senders.map(s => {
+    const ps = stats.personSentiment[s];
+    const pTotal = ps.pos + ps.neu + ps.neg || 1;
+    const avgScore = ps.scores.length > 0 ? (ps.scores.reduce((a,b) => a+b, 0) / ps.scores.length).toFixed(2) : '0';
+    const emoticon = avgScore > 0.2 ? '😊' : avgScore < -0.2 ? '😞' : '😐';
+    return `
+      <div class="sentiment-person-row">
+        <span class="sentiment-person-name">${s}</span>
+        <div class="sentiment-bar-wrap">
+          <div class="sentiment-bar-pos" style="width:${(ps.pos/pTotal*100)}%"></div>
+          <div class="sentiment-bar-neu" style="width:${(ps.neu/pTotal*100)}%"></div>
+          <div class="sentiment-bar-neg" style="width:${(ps.neg/pTotal*100)}%"></div>
+        </div>
+        <span class="sentiment-person-score">${emoticon} ${avgScore}</span>
+      </div>`;
+  }).join('');
+  document.getElementById('sentimentPersonList').innerHTML = html;
 }
 
 function renderDailyChart(stats) {
@@ -395,15 +538,11 @@ function renderDailyChart(stats) {
         data: days.map(d => stats.daily[d]),
         borderColor: '#07c160',
         backgroundColor: 'rgba(7,193,96,0.08)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 0,
-        borderWidth: 2,
+        fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2,
       }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { maxTicksLimit: 20, font: { size: 10 } }, grid: { display: false } },
@@ -425,15 +564,13 @@ function renderPersonChart(stats) {
     data: {
       labels: senders,
       datasets: [{
-        label: '消息数',
         data: senders.map(s => stats.senders[s].count),
         backgroundColor: senders.map((_,i) => colors[i % colors.length]),
         borderRadius: 6,
       }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       indexAxis: 'y',
       plugins: { legend: { display: false } },
       scales: {
@@ -449,23 +586,18 @@ function renderHourlyChart(stats) {
   destroyChart('hourlyChart');
   const ctx = document.getElementById('hourlyChart').getContext('2d');
   const maxVal = Math.max(...stats.hourly);
-  const bgColors = stats.hourly.map(v => {
-    const alpha = 0.3 + (v / maxVal) * 0.7;
-    return `rgba(7,193,96,${alpha})`;
-  });
   charts.hourly = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: Array.from({length:24}, (_,i) => `${i}:00`),
       datasets: [{
         data: stats.hourly,
-        backgroundColor: bgColors,
+        backgroundColor: stats.hourly.map(v => `rgba(7,193,96,${0.3 + (v/maxVal)*0.7})`),
         borderRadius: 4,
       }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         x: { grid: { display: false }, ticks: { font: { size: 9 } } },
@@ -490,8 +622,7 @@ function renderWeeklyChart(stats) {
       }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         x: { grid: { display: false } },
@@ -502,16 +633,11 @@ function renderWeeklyChart(stats) {
   document.getElementById('weeklyChart').parentElement.style.height = '320px';
 }
 
-function renderKeywords(stats) {
-  const sorted = Object.entries(stats.words).sort((a,b) => b[1] - a[1]).slice(0, 60);
-  const html = sorted.map(([w,c]) => `<span class="keyword-tag">${w}<span class="count">${c}</span></span>`).join('');
-  document.getElementById('keywordList').innerHTML = html || '<span style="color:#ccc;">暂无高频词数据</span>';
-}
-
 function renderEmojis(stats) {
   const sorted = Object.entries(stats.emojis).sort((a,b) => b[1] - a[1]).slice(0, 30);
-  const html = sorted.map(([e,c]) => `<div class="emoji-item">${e}<span class="ec">${c}次</span></div>`).join('');
-  document.getElementById('emojiList').innerHTML = html || '<span style="color:#ccc;">未检测到Emoji</span>';
+  document.getElementById('emojiList').innerHTML = sorted.map(([e,c]) => 
+    `<div class="emoji-item">${e}<span class="ec">${c}次</span></div>`
+  ).join('') || '<span style="color:#ccc;">未检测到Emoji</span>';
 }
 
 function renderPersonTable(stats) {
@@ -519,8 +645,11 @@ function renderPersonTable(stats) {
   const total = allMessages.length;
   const html = senders.map(s => {
     const d = stats.senders[s];
+    const ps = stats.personSentiment[s];
     const pct = ((d.count / total) * 100).toFixed(1);
     const avgLen = Math.round(d.totalLen / d.count);
+    const avgScore = ps && ps.scores.length > 0 ? (ps.scores.reduce((a,b) => a+b, 0) / ps.scores.length).toFixed(2) : '-';
+    const emoticon = avgScore > 0.2 ? '😊' : avgScore < -0.2 ? '😞' : '😐';
     const first = d.first ? toDateStr(d.first) + ' ' + String(d.first.getHours()).padStart(2,'0')+':'+String(d.first.getMinutes()).padStart(2,'0') : '-';
     const last = d.last ? toDateStr(d.last) + ' ' + String(d.last.getHours()).padStart(2,'0')+':'+String(d.last.getMinutes()).padStart(2,'0') : '-';
     return `<tr>
@@ -528,6 +657,7 @@ function renderPersonTable(stats) {
       <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;color:#07c160;font-weight:600;">${d.count.toLocaleString()}</td>
       <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;">${pct}%</td>
       <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;">${avgLen}字</td>
+      <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;">${emoticon} ${avgScore}</td>
       <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;">${d.images}</td>
       <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;font-size:12px;color:#999;">${first}</td>
       <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;font-size:12px;color:#999;">${last}</td>
@@ -540,9 +670,7 @@ function renderMessages(stats) {
   const senders = Object.keys(stats.senders);
   const sel = document.getElementById('personFilter');
   sel.innerHTML = '<option value="">全部发言人</option>' + senders.map(s => `<option value="${s}">${s}</option>`).join('');
-  
   renderMsgList();
-  
   document.getElementById('searchInput').addEventListener('input', renderMsgList);
   sel.addEventListener('change', renderMsgList);
 }
@@ -550,21 +678,17 @@ function renderMessages(stats) {
 function renderMsgList() {
   const query = document.getElementById('searchInput').value.toLowerCase();
   const person = document.getElementById('personFilter').value;
-  
   let filtered = allMessages;
   if (person) filtered = filtered.filter(m => m.sender === person);
   if (query) filtered = filtered.filter(m => m.content.toLowerCase().includes(query));
-  
   const recent = filtered.slice(-500).reverse();
-  const html = recent.map(m => `
+  document.getElementById('msgList').innerHTML = recent.map(m => `
     <div class="msg-item">
       <span class="msg-time">${toDateStr(m.time)} ${String(m.time.getHours()).padStart(2,'0')}:${String(m.time.getMinutes()).padStart(2,'0')}</span>
       <span class="msg-sender">${m.sender}</span>
       <span class="msg-content">${escapeHtml(m.content)}</span>
     </div>
-  `).join('');
-  
-  document.getElementById('msgList').innerHTML = html || '<div class="empty-state">没有匹配的消息</div>';
+  `).join('') || '<div class="empty-state">没有匹配的消息</div>';
 }
 
 function destroyChart(id) {
@@ -575,6 +699,151 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ==================== EXPORT REPORT ====================
+function exportReport() {
+  if (!globalStats) return;
+  const stats = globalStats;
+  const senders = Object.keys(stats.senders).sort((a,b) => stats.senders[b].count - stats.senders[a].count);
+  const days = Object.keys(stats.daily).sort();
+  const total = allMessages.length;
+  
+  // Capture chart images
+  const chartImgs = {};
+  const chartIds = ['dailyChart','personChart','hourlyChart','weeklyChart'];
+  for (const id of chartIds) {
+    const c = document.getElementById(id);
+    if (c) chartImgs[id] = c.toDataURL('image/png');
+  }
+  
+  // Word cloud
+  const wc = document.getElementById('wordCloud');
+  const wcImg = wc ? wc.toDataURL('image/png') : '';
+  
+  // Top words
+  const topWords = Object.entries(stats.words).sort((a,b) => b[1]-a[1]).slice(0, 30).map(([w,c]) => `${w}(${c})`).join(', ');
+  
+  // Person table
+  const personRows = senders.map(s => {
+    const d = stats.senders[s];
+    const ps = stats.personSentiment[s];
+    const pct = ((d.count / total) * 100).toFixed(1);
+    const avgLen = Math.round(d.totalLen / d.count);
+    const avgScore = ps && ps.scores.length > 0 ? (ps.scores.reduce((a,b) => a+b,0)/ps.scores.length).toFixed(2) : '-';
+    const first = d.first ? toDateStr(d.first) : '-';
+    const last = d.last ? toDateStr(d.last) : '-';
+    return `<tr><td>${s}</td><td>${d.count}</td><td>${pct}%</td><td>${avgLen}字</td><td>${avgScore}</td><td>${d.images}</td><td>${first}</td><td>${last}</td></tr>`;
+  }).join('');
+  
+  // Sentiment per person
+  const sentPersonRows = senders.map(s => {
+    const ps = stats.personSentiment[s];
+    const pTotal = ps.pos + ps.neu + ps.neg || 1;
+    const avg = ps.scores.length > 0 ? (ps.scores.reduce((a,b)=>a+b,0)/ps.scores.length).toFixed(2) : '0';
+    return `<tr><td>${s}</td><td>${ps.pos}</td><td>${ps.neu}</td><td>${ps.neg}</td><td>${avg}</td></tr>`;
+  }).join('');
+  
+  const sTotal = stats.sentiment.positive + stats.sentiment.neutral + stats.sentiment.negative;
+  
+  const reportHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>微信聊天记录分析报告</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#f0f2f5;color:#333;padding:40px;}
+.report{max-width:1100px;margin:0 auto;}
+.cover{background:linear-gradient(135deg,#07c160,#06ae56);color:#fff;padding:60px 40px;border-radius:16px;text-align:center;margin-bottom:32px;}
+.cover h1{font-size:36px;margin-bottom:12px;}
+.cover p{opacity:.85;font-size:16px;}
+.section{background:#fff;border-radius:12px;padding:32px;margin-bottom:24px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.section h2{font-size:20px;margin-bottom:20px;color:#07c160;border-bottom:2px solid #f0f0f0;padding-bottom:12px;}
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:32px;}
+.stat-box{text-align:center;padding:20px;background:#fafafa;border-radius:10px;}
+.stat-box .val{font-size:28px;font-weight:700;color:#07c160;}
+.stat-box .lbl{font-size:12px;color:#999;margin-top:4px;}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:32px;}
+.chart-box{text-align:center;}
+.chart-box img{max-width:100%;border-radius:8px;}
+.chart-box h4{font-size:14px;color:#666;margin-bottom:12px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{background:#fafafa;padding:10px 12px;text-align:left;border-bottom:2px solid #eee;font-weight:600;}
+td{padding:8px 12px;border-bottom:1px solid #f5f5f5;}
+.footer{text-align:center;color:#bbb;font-size:12px;margin-top:32px;}
+.sent-summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;}
+.sent-box{text-align:center;padding:20px;border-radius:10px;}
+.sent-pos{background:#f0faf4;color:#07c160;}
+.sent-neu{background:#f5f7fa;color:#576b95;}
+.sent-neg{background:#fff5f5;color:#e74c3c;}
+.sent-box .sv{font-size:28px;font-weight:700;}
+.sent-box .sl{font-size:12px;opacity:.7;margin-top:4px;}
+</style></head>
+<body><div class="report">
+<div class="cover">
+  <h1>📊 微信聊天记录分析报告</h1>
+  <p>${days[0] || '-'} ~ ${days[days.length-1] || '-'} | ${senders.length}人 | ${total.toLocaleString()}条消息</p>
+  <p style="margin-top:8px;font-size:13px;opacity:.7;">生成时间：${new Date().toLocaleString('zh-CN')}</p>
+</div>
+
+<div class="section">
+  <h2>📋 总体概览</h2>
+  <div class="stats-row">
+    <div class="stat-box"><div class="val">${total.toLocaleString()}</div><div class="lbl">总消息数</div></div>
+    <div class="stat-box"><div class="val">${senders.length}</div><div class="lbl">参与人数</div></div>
+    <div class="stat-box"><div class="val">${days.length}</div><div class="lbl">聊天天数</div></div>
+    <div class="stat-box"><div class="val">${stats.imgCount.toLocaleString()}</div><div class="lbl">图片/文件</div></div>
+    <div class="stat-box"><div class="val">${Math.round(total/Math.max(days.length,1))}</div><div class="lbl">日均消息</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>😊 情感分析</h2>
+  <div class="sent-summary">
+    <div class="sent-box sent-pos"><div class="sv">${stats.sentiment.positive.toLocaleString()}</div><div class="sl">积极消息 (${((stats.sentiment.positive/sTotal)*100).toFixed(1)}%)</div></div>
+    <div class="sent-box sent-neu"><div class="sv">${stats.sentiment.neutral.toLocaleString()}</div><div class="sl">中性消息 (${((stats.sentiment.neutral/sTotal)*100).toFixed(1)}%)</div></div>
+    <div class="sent-box sent-neg"><div class="sv">${stats.sentiment.negative.toLocaleString()}</div><div class="sl">消极消息 (${((stats.sentiment.negative/sTotal)*100).toFixed(1)}%)</div></div>
+  </div>
+  <h4 style="margin-bottom:12px;color:#666;">各成员情感得分（-1 ~ +1，越高越积极）</h4>
+  <table>
+    <tr><th>成员</th><th>😊 积极</th><th>😐 中性</th><th>😞 消极</th><th>综合评分</th></tr>
+    ${sentPersonRows}
+  </table>
+</div>
+
+<div class="section">
+  <h2>📈 趋势图表</h2>
+  <div class="charts">
+    <div class="chart-box"><h4>每日消息趋势</h4><img src="${chartImgs.dailyChart || ''}" alt=""></div>
+    <div class="chart-box"><h4>发言分布</h4><img src="${chartImgs.personChart || ''}" alt=""></div>
+    <div class="chart-box"><h4>24小时活跃</h4><img src="${chartImgs.hourlyChart || ''}" alt=""></div>
+    <div class="chart-box"><h4>每周活跃</h4><img src="${chartImgs.weeklyChart || ''}" alt=""></div>
+  </div>
+  ${wcImg ? `<div class="chart-box" style="text-align:center;margin-bottom:24px;"><h4 style="margin-bottom:12px;color:#666;">☁️ 高频词云</h4><img src="${wcImg}" alt="" style="max-width:100%;border-radius:8px;"></div>` : ''}
+</div>
+
+<div class="section">
+  <h2>🔤 高频词汇 TOP30</h2>
+  <p style="word-break:break-all;line-height:2;color:#666;">${topWords || '无'}</p>
+</div>
+
+<div class="section">
+  <h2>👥 成员发言统计</h2>
+  <table>
+    <tr><th>发言人</th><th>消息数</th><th>占比</th><th>平均长度</th><th>情感评分</th><th>图片/文件</th><th>首条</th><th>末条</th></tr>
+    ${personRows}
+  </table>
+</div>
+
+<div class="footer">📊 由微信聊天记录分析工具自动生成 | 数据来源：用户上传</div>
+</div></body></html>`;
+  
+  const blob = new Blob([reportHtml], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `微信聊天分析报告_${new Date().toISOString().slice(0,10)}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 </script>
 </body>
