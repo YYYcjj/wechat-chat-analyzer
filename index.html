@@ -308,8 +308,13 @@ const STOP_WORDS = new Set([
   '不是','一下','一些','一样','有点','真的','还是','比较','开始','之前','之后','起来',
   '时候','时间','地方','问题','方法','东西','事情','还是','今天','明天','昨天','现在',
   '我们','他们','你们','自己','别人','大家','她们','他的','她的','你的','我的',
+  '了吗','什么','怎么','干嘛','哪呢','那呢','么么','是啊','好的',
   // Common number + noise patterns
   'group','user','msg','app','set','get','api','cdn','img',
+  // More WeChat internal
+  'appmsg','appid','sdkver','view','scene','tousername','fromusername','encrypt',
+  'aeskey','ticket','pass','ticket','token','nonce','sign','xml','mmlisten','voip',
+  'cdnurl','thumburl','mid','mids','cmdbuffer','buffer','length','offset','limit',
 ])
 const POSITIVE_WORDS = new Set([
   '哈哈','哈哈哈','嘿嘿','嘻嘻','开心','高兴','快乐','幸福','爽','棒','好','太好了','真好','不错','赞','厉害','牛','牛逼','优秀','完美','喜欢','爱','可爱','好看','漂亮','帅','谢谢','感谢','感恩','感动','温暖','舒服','期待','希望','加油','冲','嗨','耶','哇','嗯嗯','好的','OK','ok','👍','nice','great','good','awesome'
