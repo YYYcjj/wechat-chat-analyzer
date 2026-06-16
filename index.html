@@ -288,7 +288,29 @@ function parseTime(str) {
   return new Date();
 }
 
-// ==================== SENTIMENT ====================
+// ==================== STOP WORDS ====================
+const STOP_WORDS = new Set([
+  // WeChat internal data noise
+  'type','title','des','action','url','showtype','username','nickname','displayname','alias',
+  'memberlist','membercount','chatroom','chatroomname','msgtype','fromuser','touser','content',
+  'createtime','start','end','msgid','newmsgid','newmsg','localid','seq','status','data',
+  'item','items','list','key','value','name','id','id2','info','code','ver','xml','json',
+  'source','target','state','flag','size','count','total','page','index','lang','ext','version',
+  // Common English noise
+  'the','and','for','with','this','that','from','have','are','not','but','you','all','can','has',
+  'was','one','our','out','day','use','its','his','her','she','him','them','they','will','just',
+  'about','what','when','like','your','how','than','then','also','into','more','some','over',
+  'only','other','been','such','each','very','which','their','there','would','could','should',
+  'http','https','com','www','html','php','html','net','org','jpg','png','svg','mp3','mp4',
+  // Chinese common noise
+  '一个','这个','那个','什么','怎么','为什么','没有','可以','就是','还是','因为','所以',
+  '如果','已经','但是','不过','然后','可能','应该','需要','知道','觉得','还是','现在',
+  '不是','一下','一些','一样','有点','真的','还是','比较','开始','之前','之后','起来',
+  '时候','时间','地方','问题','方法','东西','事情','还是','今天','明天','昨天','现在',
+  '我们','他们','你们','自己','别人','大家','她们','他的','她的','你的','我的',
+  // Common number + noise patterns
+  'group','user','msg','app','set','get','api','cdn','img',
+])
 const POSITIVE_WORDS = new Set([
   '哈哈','哈哈哈','嘿嘿','嘻嘻','开心','高兴','快乐','幸福','爽','棒','好','太好了','真好','不错','赞','厉害','牛','牛逼','优秀','完美','喜欢','爱','可爱','好看','漂亮','帅','谢谢','感谢','感恩','感动','温暖','舒服','期待','希望','加油','冲','嗨','耶','哇','嗯嗯','好的','OK','ok','👍','nice','great','good','awesome'
 ]);
@@ -364,14 +386,17 @@ function getStats() {
       const cleaned = text.replace(/[^\u4e00-\u9fff\w]/g, '');
       for (let i = 0; i < cleaned.length - 1; i++) {
         const bigram = cleaned.substring(i, i+2);
-        if (/[\u4e00-\u9fff]{2}/.test(bigram)) {
+        if (/[\u4e00-\u9fff]{2}/.test(bigram) && !STOP_WORDS.has(bigram.toLowerCase())) {
           words[bigram] = (words[bigram] || 0) + 1;
         }
       }
       const engWords = text.match(/[a-zA-Z]{2,}/g);
       if (engWords) {
         for (const w of engWords) {
-          words[w.toLowerCase()] = (words[w.toLowerCase()] || 0) + 1;
+          const lw = w.toLowerCase();
+          if (!STOP_WORDS.has(lw)) {
+            words[lw] = (words[lw] || 0) + 1;
+          }
         }
       }
     }
