@@ -494,10 +494,14 @@ function renderStats(stats) {
   const firstDay = days[0] || '-';
   const lastDay = days[days.length-1] || '-';
   
+  // Calculate date span
+  const spanDays = days.length >= 2 ? Math.round((new Date(lastDay) - new Date(firstDay)) / 86400000) + 1 : days.length;
+  
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-card"><div class="label">📨 总消息数</div><div class="value">${allMessages.length.toLocaleString()}</div><div class="sub">条消息</div></div>
     <div class="stat-card"><div class="label">👥 参与人数</div><div class="value">${senders.length}</div><div class="sub">位成员</div></div>
-    <div class="stat-card"><div class="label">📅 聊天跨度</div><div class="value">${days.length}</div><div class="sub">天 (${firstDay} ~ ${lastDay})</div></div>
+    <div class="stat-card"><div class="label">📅 日期跨度</div><div class="value">${spanDays.toLocaleString()}</div><div class="sub">天 (${firstDay} ~ ${lastDay})</div></div>
+    <div class="stat-card"><div class="label">💬 聊天活跃天</div><div class="value">${days.length.toLocaleString()}</div><div class="sub">天有消息</div></div>
     <div class="stat-card"><div class="label">📷 图片/文件</div><div class="value">${stats.imgCount.toLocaleString()}</div><div class="sub">条媒体消息</div></div>
     <div class="stat-card"><div class="label">💬 日均消息</div><div class="value">${Math.round(allMessages.length / Math.max(days.length,1))}</div><div class="sub">条/天</div></div>
   `;
@@ -732,6 +736,9 @@ function exportReport() {
   const stats = globalStats;
   const senders = Object.keys(stats.senders).sort((a,b) => stats.senders[b].count - stats.senders[a].count);
   const days = Object.keys(stats.daily).sort();
+  const first = days[0] || '-';
+  const last = days[days.length-1] || '-';
+  const dateSpan = days.length >= 2 ? Math.round((new Date(last) - new Date(first)) / 86400000) + 1 : days.length;
   const total = allMessages.length;
   
   // Capture chart images
@@ -815,7 +822,8 @@ td{padding:8px 12px;border-bottom:1px solid #f5f5f5;}
   <div class="stats-row">
     <div class="stat-box"><div class="val">${total.toLocaleString()}</div><div class="lbl">总消息数</div></div>
     <div class="stat-box"><div class="val">${senders.length}</div><div class="lbl">参与人数</div></div>
-    <div class="stat-box"><div class="val">${days.length}</div><div class="lbl">聊天天数</div></div>
+    <div class="stat-box"><div class="val">${dateSpan.toLocaleString()}</div><div class="lbl">日期跨度</div></div>
+    <div class="stat-box"><div class="val">${days.length}</div><div class="lbl">聊天活跃天</div></div>
     <div class="stat-box"><div class="val">${stats.imgCount.toLocaleString()}</div><div class="lbl">图片/文件</div></div>
     <div class="stat-box"><div class="val">${Math.round(total/Math.max(days.length,1))}</div><div class="lbl">日均消息</div></div>
   </div>
