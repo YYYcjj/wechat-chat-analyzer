@@ -87,6 +87,34 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
 .emoji-item { font-size:24px; padding:8px 12px; background:#fafafa; border-radius:8px; display:flex; align-items:center; gap:8px; }
 .emoji-item .ec { font-size:12px; color:#999; }
 
+/* Personality */
+.personality-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
+.person-card { background:#fafbfc; border-radius:12px; padding:20px; border:1px solid #f0f0f0; }
+.person-card .p-name { font-size:16px; font-weight:600; margin-bottom:12px; color:#333; }
+.person-card .p-metrics { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
+.person-card .p-metric { font-size:12px; color:#666; }
+.person-card .p-metric .mv { font-weight:600; color:#07c160; }
+.person-tags { display:flex; flex-wrap:wrap; gap:6px; }
+.person-tag { padding:4px 12px; border-radius:20px; font-size:12px; font-weight:500; }
+.person-tag.active { background:#e6f7ee; color:#07c160; }
+.person-tag.thought { background:#eef2ff; color:#576b95; }
+.person-tag.fun { background:#fff7e6; color:#f5a623; }
+.person-tag.warm { background:#fff0f6; color:#e91e63; }
+.person-tag.night { background:#f3e8ff; color:#9b59b6; }
+.person-tag.direct { background:#e6f3ff; color:#3498db; }
+
+/* Relationship */
+.rel-metrics { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+.rel-card { background:#fafbfc; border-radius:10px; padding:14px; text-align:center; }
+.rel-card .r-label { font-size:12px; color:#999; margin-bottom:4px; }
+.rel-card .r-value { font-size:22px; font-weight:700; color:#07c160; }
+.rel-card .r-sub { font-size:11px; color:#bbb; }
+.rel-bar { display:flex; align-items:center; gap:8px; margin:8px 0; }
+.rel-bar-label { font-size:12px; color:#666; min-width:60px; }
+.rel-bar-track { flex:1; height:16px; background:#f0f0f0; border-radius:8px; overflow:hidden; display:flex; }
+.rel-bar-fill { height:100%; }
+.rel-bar-value { font-size:12px; color:#999; min-width:35px; text-align:right; }
+
 .footer { text-align:center; padding:32px; color:#bbb; font-size:12px; }
 </style>
 </head>
@@ -146,6 +174,22 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
       <div class="chart-card">
         <h3>📅 每周活跃分布</h3>
         <canvas id="weeklyChart"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card full-width">
+      <h3>🎭 人物画像</h3>
+      <div class="personality-grid" id="personalityGrid"></div>
+    </div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>📊 情感变化趋势</h3>
+        <canvas id="sentimentTrend"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>💞 互动关系分析</h3>
+        <div id="relationshipAnalysis"></div>
       </div>
     </div>
 
@@ -483,6 +527,9 @@ function renderAll() {
   globalStats = stats;
   renderStats(stats);
   renderSentiment(stats);
+  renderPersonality(stats);
+  renderSentimentTrend(stats);
+  renderRelationship(stats);
   drawWordCloud(stats);
   renderDailyChart(stats);
   renderPersonChart(stats);
@@ -723,6 +770,199 @@ function renderMsgList() {
       <span class="msg-content">${escapeHtml(m.content)}</span>
     </div>
   `).join('') || '<div class="empty-state">没有匹配的消息</div>';
+}
+
+// ==================== PERSONALITY ====================
+function renderPersonality(stats) {
+  const senders = Object.keys(stats.senders).sort((a,b) => stats.senders[b].count - stats.senders[a].count);
+  
+  const html = senders.slice(0, 6).map(s => {
+    const d = stats.senders[s];
+    const ps = stats.personSentiment[s];
+    const avgLen = Math.round(d.totalLen / d.count);
+    const emojiCount = d.count; // rough
+    const avgScore = ps.scores.length ? (ps.scores.reduce((a,b)=>a+b,0)/ps.scores.length).toFixed(2) : '0';
+    
+    // Detect personality traits
+    const traits = [];
+    const dailyActive = d.count / Math.max(Object.keys(stats.daily).length, 1);
+    
+    if (d.count > 100 && dailyActive > 3) traits.push({c:'active',t:'💬 话多活跃'});
+    if (avgLen > 20) traits.push({c:'thought',t:'🧠 表达丰富'});
+    else if (avgLen < 8 && d.count > 30) traits.push({c:'direct',t:'✂️ 简洁明了'});
+    if (parseFloat(avgScore) > 0.3) traits.push({c:'warm',t:'❤️ 暖心积极'});
+    if (parseFloat(avgScore) < -0.2) traits.push({c:'direct',t:'😤 情绪外露'});
+    
+    // Night owl or early bird
+    const allTimes = allMessages.filter(m => m.sender === s).map(m => m.time.getHours());
+    const nightCount = allTimes.filter(h => h >= 22 || h <= 5).length;
+    const morningCount = allTimes.filter(h => h >= 6 && h <= 9).length;
+    if (nightCount > morningCount * 1.5 && nightCount > 10) traits.push({c:'night',t:'🌙 夜猫子'});
+    if (morningCount > nightCount * 1.5 && morningCount > 10) traits.push({c:'active',t:'☀️ 早起鸟'});
+    
+    // Active hours
+    const hourBins = new Array(24).fill(0);
+    allTimes.forEach(h => hourBins[h]++);
+    const peak = hourBins.indexOf(Math.max(...hourBins));
+    
+    if (traits.length === 0) traits.push({c:'thought',t:'📝 中规中矩'});
+    
+    return `<div class="person-card">
+      <div class="p-name">${s}</div>
+      <div class="p-metrics">
+        <div class="p-metric">消息数<span class="mv">${d.count}</span></div>
+        <div class="p-metric">均长<span class="mv">${avgLen}字</span></div>
+        <div class="p-metric">情感分<span class="mv">${avgScore}</span></div>
+        <div class="p-metric">活跃峰<span class="mv">${peak}:00</span></div>
+      </div>
+      <div class="person-tags">
+        ${traits.map(t => `<span class="person-tag ${t.c}">${t.t}</span>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  
+  document.getElementById('personalityGrid').innerHTML = html || '<span style="color:#ccc;">需要至少一条消息</span>';
+}
+
+// ==================== SENTIMENT TREND ====================
+function renderSentimentTrend(stats) {
+  const days = Object.keys(stats.daily).sort();
+  if (days.length < 2) return;
+  
+  // Calculate daily sentiment score
+  const dailyScores = {};
+  for (const m of allMessages) {
+    const day = toDateStr(m.time);
+    if (!dailyScores[day]) dailyScores[day] = { pos:0, neg:0, total:0 };
+    const s = analyzeSentiment(m.content);
+    if (s.type === 'positive') dailyScores[day].pos++;
+    else if (s.type === 'negative') dailyScores[day].neg++;
+    dailyScores[day].total++;
+  }
+  
+  const scores = days.map(d => {
+    const ds = dailyScores[d] || { pos:0, neg:0, total:1 };
+    return ((ds.pos - ds.neg) / ds.total).toFixed(2);
+  });
+  
+  destroyChart('sentimentTrend');
+  const ctx = document.getElementById('sentimentTrend').getContext('2d');
+  
+  // Rolling average for smoother line
+  const smooth = [];
+  const window = Math.max(3, Math.floor(days.length / 20));
+  for (let i = 0; i < scores.length; i++) {
+    let sum = 0, cnt = 0;
+    for (let j = Math.max(0, i - window); j <= Math.min(scores.length - 1, i + window); j++) {
+      sum += parseFloat(scores[j]); cnt++;
+    }
+    smooth.push((sum / cnt).toFixed(2));
+  }
+  
+  charts.sentimentTrend = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: days,
+      datasets: [{
+        label: '情感趋势',
+        data: smooth,
+        borderColor: '#e91e63',
+        backgroundColor: 'rgba(233,30,99,0.05)',
+        fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `情感分: ${ctx.parsed.y}` } }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 15, font: { size: 9 } }, grid: { display: false } },
+        y: { min: -1, max: 1, grid: { color: '#f0f0f0' },
+          ticks: { callback: v => v > 0 ? '😊' : v < 0 ? '😞' : '😐', font: { size: 14 } } }
+      }
+    }
+  });
+  document.getElementById('sentimentTrend').parentElement.style.height = '320px';
+}
+
+// ==================== RELATIONSHIP ====================
+function renderRelationship(stats) {
+  const senders = Object.keys(stats.senders).sort((a,b) => stats.senders[b].count - stats.senders[a].count);
+  const total = allMessages.length;
+  
+  if (senders.length < 2) {
+    document.getElementById('relationshipAnalysis').innerHTML = '<span style="color:#ccc;">单人聊天，无关系分析</span>';
+    return;
+  }
+  
+  // Top 2 people
+  const p1 = senders[0], p2 = senders[1];
+  const c1 = stats.senders[p1].count, c2 = stats.senders[p2].count;
+  const pct1 = ((c1 / total) * 100).toFixed(0), pct2 = ((c2 / total) * 100).toFixed(0);
+  
+  // Who is more active
+  const active = c1 > c2 ? p1 : p2;
+  const activeRatio = Math.max(c1, c2) / Math.min(c1, c2);
+  
+  // Reply pattern: count back-and-forth exchanges
+  let exchanges = 0, lastSender = '';
+  for (const m of allMessages) {
+    if (m.sender !== lastSender && (m.sender === p1 || m.sender === p2) && (lastSender === p1 || lastSender === p2)) {
+      exchanges++;
+    }
+    lastSender = m.sender;
+  }
+  
+  // Avg word per sender
+  const avg1 = Math.round(stats.senders[p1].totalLen / c1);
+  const avg2 = Math.round(stats.senders[p2].totalLen / c2);
+  
+  // Interaction intensity
+  const chatDays = Object.keys(stats.daily).length;
+  const intensity = Math.round((c1 + c2) / Math.max(chatDays, 1));
+  
+  const html = `
+    <div class="rel-metrics">
+      <div class="rel-card">
+        <div class="r-label">🔥 互动热度</div>
+        <div class="r-value">${intensity}</div>
+        <div class="r-sub">条/天</div>
+      </div>
+      <div class="rel-card">
+        <div class="r-label">🔁 对话轮次</div>
+        <div class="r-value">${exchanges}</div>
+        <div class="r-sub">次</div>
+      </div>
+      <div class="rel-card">
+        <div class="r-label">💪 更主动方</div>
+        <div class="r-value">${active}</div>
+        <div class="r-sub">${activeRatio.toFixed(1)}x</div>
+      </div>
+      <div class="rel-card">
+        <div class="r-label">📝 表达风格</div>
+        <div class="r-value">${avg1 > avg2 ? '长篇' : '短快'}</div>
+        <div class="r-sub">均${avg1}vs${avg2}字</div>
+      </div>
+    </div>
+    <div class="rel-bar">
+      <span class="rel-bar-label">${p1}</span>
+      <div class="rel-bar-track">
+        <div class="rel-bar-fill" style="width:${pct1}%;background:#07c160;"></div>
+        <div class="rel-bar-fill" style="width:${pct2}%;background:#576b95;"></div>
+      </div>
+      <span class="rel-bar-value">${pct1}%</span>
+    </div>
+    <div class="rel-bar">
+      <span class="rel-bar-label">${p2}</span>
+      <div class="rel-bar-track">
+        <div class="rel-bar-fill" style="width:${pct2}%;background:#576b95;"></div>
+      </div>
+      <span class="rel-bar-value">${pct2}%</span>
+    </div>
+  `;
+  document.getElementById('relationshipAnalysis').innerHTML = html;
 }
 
 function destroyChart(id) {
