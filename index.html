@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>微信聊天记录分析</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#f0f2f5; color:#333; min-height:100vh; }
+.header { background:linear-gradient(135deg,#07c160,#06ae56); color:#fff; padding:24px 32px; text-align:center; box-shadow:0 2px 12px rgba(0,0,0,.1); }
+.header h1 { font-size:28px; font-weight:600; }
+.header p { opacity:.85; margin-top:6px; font-size:14px; }
+
+.container { max-width:1400px; margin:0 auto; padding:24px; }
+.upload-zone { border:3px dashed #c0c4cc; border-radius:16px; padding:60px 40px; text-align:center; cursor:pointer; transition:all .3s; background:#fff; margin-bottom:24px; }
+.upload-zone:hover, .upload-zone.dragover { border-color:#07c160; background:#f0faf4; }
+.upload-zone .icon { font-size:56px; margin-bottom:16px; }
+.upload-zone h3 { font-size:20px; color:#333; margin-bottom:8px; }
+.upload-zone p { color:#999; font-size:14px; }
+.upload-zone .formats { margin-top:16px; font-size:12px; color:#bbb; }
+.upload-zone input[type=file] { display:none; }
+
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:24px; }
+.stat-card { background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.stat-card .label { font-size:13px; color:#999; margin-bottom:8px; }
+.stat-card .value { font-size:32px; font-weight:700; color:#07c160; }
+.stat-card .sub { font-size:12px; color:#bbb; margin-top:4px; }
+
+.charts-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }
+@media(max-width:900px) { .charts-row{grid-template-columns:1fr;} }
+.chart-card { background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.chart-card h3 { font-size:16px; margin-bottom:16px; color:#333; display:flex; align-items:center; gap:8px; }
+.chart-card canvas { max-height:320px; }
+
+.full-width { grid-column:1/-1; }
+
+.message-viewer { background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,.06); margin-bottom:24px; }
+.message-viewer h3 { font-size:16px; margin-bottom:16px; }
+.search-bar { display:flex; gap:8px; margin-bottom:16px; }
+.search-bar input { flex:1; padding:10px 16px; border:1px solid #e0e0e0; border-radius:8px; font-size:14px; outline:none; }
+.search-bar input:focus { border-color:#07c160; }
+.search-bar select { padding:10px 16px; border:1px solid #e0e0e0; border-radius:8px; font-size:14px; outline:none; background:#fff; }
+.msg-list { max-height:500px; overflow-y:auto; }
+.msg-item { padding:12px 16px; border-bottom:1px solid #f5f5f5; display:flex; gap:12px; align-items:flex-start; }
+.msg-item:hover { background:#fafafa; }
+.msg-time { font-size:12px; color:#999; white-space:nowrap; min-width:70px; }
+.msg-sender { font-size:13px; font-weight:600; color:#07c160; min-width:80px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.msg-content { font-size:14px; color:#333; flex:1; word-break:break-all; line-height:1.5; }
+
+.word-cloud-section { margin-bottom:24px; }
+
+.export-bar { text-align:center; margin-bottom:24px; }
+.btn { padding:10px 24px; border-radius:8px; font-size:14px; border:none; cursor:pointer; font-weight:500; transition:all .2s; }
+.btn-primary { background:#07c160; color:#fff; }
+.btn-primary:hover { background:#06ae56; }
+.btn-outline { background:#fff; color:#07c160; border:1px solid #07c160; }
+.btn-outline:hover { background:#f0faf4; }
+
+.empty-state { text-align:center; padding:60px 20px; color:#bbb; }
+.empty-state .big-icon { font-size:72px; margin-bottom:16px; }
+
+.tabs { display:flex; gap:4px; margin-bottom:16px; }
+.tab { padding:8px 20px; border-radius:8px; font-size:14px; cursor:pointer; border:none; background:#f5f5f5; color:#666; transition:all .2s; }
+.tab.active { background:#07c160; color:#fff; }
+
+.keyword-list { display:flex; flex-wrap:wrap; gap:8px; }
+.keyword-tag { padding:6px 14px; background:#f0faf4; color:#07c160; border-radius:20px; font-size:13px; }
+.keyword-tag .count { color:#999; margin-left:4px; font-size:11px; }
+
+.emoji-list { display:flex; flex-wrap:wrap; gap:12px; }
+.emoji-item { font-size:24px; padding:8px 12px; background:#fafafa; border-radius:8px; display:flex; align-items:center; gap:8px; }
+.emoji-item .ec { font-size:12px; color:#999; }
+
+.footer { text-align:center; padding:32px; color:#bbb; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📊 微信聊天记录分析</h1>
+  <p>上传聊天记录导出文件，一键生成可视化分析报告</p>
+</div>
+
+<div class="container">
+  <div id="uploadSection">
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">📁</div>
+      <h3>点击上传或拖拽文件到此处</h3>
+      <p>支持微信PC版/手机版导出的 .txt 文件</p>
+      <p class="formats">支持格式：微信导出txt · 纯文本 · CSV</p>
+      <input type="file" id="fileInput" accept=".txt,.csv,.text">
+    </div>
+  </div>
+
+  <div id="dashboard" style="display:none;">
+    <div class="stats-grid" id="statsGrid"></div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>📈 每日消息趋势</h3>
+        <canvas id="dailyChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>👥 发言人数分布</h3>
+        <canvas id="personChart"></canvas>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>🕐 24小时活跃时段</h3>
+        <canvas id="hourlyChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>📅 每周活跃分布</h3>
+        <canvas id="weeklyChart"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card full-width word-cloud-section">
+      <h3>🔤 高频关键词</h3>
+      <div class="keyword-list" id="keywordList"></div>
+    </div>
+
+    <div class="chart-card full-width" style="margin-bottom:24px;">
+      <h3>😀 常用表情/Emoji</h3>
+      <div class="emoji-list" id="emojiList"></div>
+    </div>
+
+    <div class="chart-card full-width">
+      <h3>👤 个人详细统计</h3>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:14px;" id="personTable">
+          <thead>
+            <tr style="background:#fafafa;">
+              <th style="padding:12px;text-align:left;border-bottom:1px solid #eee;">发言人</th>
+              <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">消息数</th>
+              <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">占比</th>
+              <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">平均长度</th>
+              <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">图片/文件</th>
+              <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">首条时间</th>
+              <th style="padding:12px;text-align:right;border-bottom:1px solid #eee;">末条时间</th>
+            </tr>
+          </thead>
+          <tbody id="personTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="message-viewer">
+      <h3>💬 消息记录</h3>
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="搜索消息内容...">
+        <select id="personFilter"><option value="">全部发言人</option></select>
+      </div>
+      <div class="msg-list" id="msgList"></div>
+    </div>
+
+    <div class="export-bar">
+      <button class="btn btn-outline" onclick="location.reload()">🔄 重新上传</button>
+    </div>
+  </div>
+</div>
+
+<div class="footer">数据仅在本地浏览器中处理，不会上传到任何服务器</div>
+
+<script>
+let allMessages = [];
+let charts = {};
+
+// --- File Upload ---
+const zone = document.getElementById('uploadZone');
+const input = document.getElementById('fileInput');
+
+zone.addEventListener('click', () => input.click());
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+input.addEventListener('change', e => handleFile(e.target.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    parseWeChat(text);
+    document.getElementById('uploadSection').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// --- Parser ---
+function parseWeChat(text) {
+  allMessages = [];
+  const lines = text.split('\n');
+  
+  // Pattern 1: 2024-01-15 14:30:25 张三
+  // Pattern 2: 1/15/24 14:30:25 张三
+  // Pattern 3: 2024-01-15 14:30:25 张三: message (with colon)
+  // Pattern 4: 张三 2024-01-15 14:30:25
+  
+  const timePatterns = [
+    /^(\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}:\d{2})\s+(.+?)(?:\s*$)/,
+    /^(\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}:\d{2})\s+(.+?):\s*(.*)/,
+    /^(\d{2,4}\/\d{1,2}\/\d{2,4}\s+\d{1,2}:\d{2}:\d{2})\s+(.+?)(?:\s*$)/,
+    /^(\d{4}\/\d{2}\/\d{2}\s+\d{1,2}:\d{2}:\d{2})\s+(.+?)(?:\s*$)/,
+    /^(\d{4}\/\d{2}\/\d{2}\s+\d{1,2}:\d{2})\s+(.+)$/,
+  ];
+  
+  let current = null;
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    
+    let matched = false;
+    for (const pat of timePatterns) {
+      const m = trimmed.match(pat);
+      if (m) {
+        if (current) allMessages.push(current);
+        let sender = m[2].trim();
+        let content = m[3] ? m[3].trim() : '';
+        
+        // If sender contains colon separator
+        if (!content && sender.includes('：')) {
+          const idx = sender.indexOf('：');
+          content = sender.substring(idx + 1).trim();
+          sender = sender.substring(0, idx).trim();
+        } else if (!content && sender.includes(':')) {
+          const idx = sender.indexOf(':');
+          content = sender.substring(idx + 1).trim();
+          sender = sender.substring(0, idx).trim();
+        }
+        
+        // Remove trailing colon from sender
+        sender = sender.replace(/[：:]$/, '').trim();
+        
+        current = {
+          time: parseTime(m[1]),
+          sender: sender,
+          content: content || '',
+        };
+        matched = true;
+        break;
+      }
+    }
+    
+    if (!matched && current) {
+      current.content += (current.content ? '\n' : '') + trimmed;
+    }
+  }
+  if (current && current.sender) allMessages.push(current);
+  
+  // Clean: filter out system messages
+  allMessages = allMessages.filter(m => m.sender && m.sender.length > 0 && m.sender.length < 50);
+  
+  if (allMessages.length === 0) {
+    alert('未能识别聊天记录格式。请确认文件是微信导出的txt格式。\n常见格式：\n2024-01-15 14:30:25 张三\n消息内容');
+    location.reload();
+    return;
+  }
+  
+  renderAll();
+}
+
+function parseTime(str) {
+  // Try various formats
+  let d = new Date(str.replace(/\//g, '-'));
+  if (!isNaN(d.getTime())) return d;
+  
+  // Try MM/DD/YY format
+  const m2 = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (m2) {
+    const year = m2[3].length === 2 ? '20' + m2[3] : m2[3];
+    return new Date(`${year}-${m2[1].padStart(2,'0')}-${m2[2].padStart(2,'0')}T${m2[4].padStart(2,'0')}:${m2[5].padStart(2,'0')}:${(m2[6]||'00').padStart(2,'0')}`);
+  }
+  return new Date();
+}
+
+// --- Stats ---
+function getStats() {
+  const senders = {};
+  const daily = {};
+  const hourly = new Array(24).fill(0);
+  const weekly = new Array(7).fill(0);
+  const words = {};
+  const emojis = {};
+  let imgCount = 0;
+  
+  for (const m of allMessages) {
+    // Sender stats
+    if (!senders[m.sender]) senders[m.sender] = { count:0, totalLen:0, first:null, last:null, images:0 };
+    senders[m.sender].count++;
+    senders[m.sender].totalLen += m.content.length;
+    const t = m.time;
+    if (!senders[m.sender].first || t < senders[m.sender].first) senders[m.sender].first = t;
+    if (!senders[m.sender].last || t > senders[m.sender].last) senders[m.sender].last = t;
+    
+    // Daily
+    const day = toDateStr(t);
+    daily[day] = (daily[day] || 0) + 1;
+    
+    // Hourly
+    hourly[t.getHours()]++;
+    
+    // Weekly
+    weekly[t.getDay()]++;
+    
+    // Check for images/files
+    if (/\[图片\]|\[照片\]|\[文件\]|\[视频\]|\[语音\]|<img|\[Image\]|\[Photo\]|\[File\]|\[Video\]/i.test(m.content)) {
+      senders[m.sender].images++;
+      imgCount++;
+    }
+    
+    // Word frequency (Chinese + English)
+    const text = m.content.replace(/\[[^\]]+\]/g, '').trim();
+    if (text) {
+      // Chinese words (bigram)
+      const cleaned = text.replace(/[^\u4e00-\u9fff\w]/g, '');
+      for (let i = 0; i < cleaned.length - 1; i++) {
+        const bigram = cleaned.substring(i, i+2);
+        if (/[\u4e00-\u9fff]{2}/.test(bigram)) {
+          words[bigram] = (words[bigram] || 0) + 1;
+        }
+      }
+      // English words
+      const engWords = text.match(/[a-zA-Z]{2,}/g);
+      if (engWords) {
+        for (const w of engWords) {
+          const lw = w.toLowerCase();
+          words[lw] = (words[lw] || 0) + 1;
+        }
+      }
+    }
+    
+    // Emojis
+    const emojiMatches = text.match(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu);
+    if (emojiMatches) {
+      for (const e of emojiMatches) {
+        emojis[e] = (emojis[e] || 0) + 1;
+      }
+    }
+  }
+  
+  return { senders, daily, hourly, weekly, words, emojis, imgCount };
+}
+
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+const weekLabels = ['周日','周一','周二','周三','周四','周五','周六'];
+
+// --- Render ---
+function renderAll() {
+  const stats = getStats();
+  renderStats(stats);
+  renderDailyChart(stats);
+  renderPersonChart(stats);
+  renderHourlyChart(stats);
+  renderWeeklyChart(stats);
+  renderKeywords(stats);
+  renderEmojis(stats);
+  renderPersonTable(stats);
+  renderMessages(stats);
+}
+
+function renderStats(stats) {
+  const senders = Object.keys(stats.senders);
+  const days = Object.keys(stats.daily).sort();
+  const firstDay = days[0] || '-';
+  const lastDay = days[days.length-1] || '-';
+  
+  const html = `
+    <div class="stat-card"><div class="label">📨 总消息数</div><div class="value">${allMessages.length.toLocaleString()}</div><div class="sub">条消息</div></div>
+    <div class="stat-card"><div class="label">👥 参与人数</div><div class="value">${senders.length}</div><div class="sub">位成员</div></div>
+    <div class="stat-card"><div class="label">📅 聊天跨度</div><div class="value">${days.length}</div><div class="sub">天 (${firstDay} ~ ${lastDay})</div></div>
+    <div class="stat-card"><div class="label">📷 图片/文件</div><div class="value">${stats.imgCount.toLocaleString()}</div><div class="sub">条媒体消息</div></div>
+    <div class="stat-card"><div class="label">💬 日均消息</div><div class="value">${Math.round(allMessages.length / Math.max(days.length,1))}</div><div class="sub">条/天</div></div>
+  `;
+  document.getElementById('statsGrid').innerHTML = html;
+}
+
+function renderDailyChart(stats) {
+  const days = Object.keys(stats.daily).sort();
+  destroyChart('dailyChart');
+  const ctx = document.getElementById('dailyChart').getContext('2d');
+  charts.daily = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: days,
+      datasets: [{
+        label: '消息数',
+        data: days.map(d => stats.daily[d]),
+        borderColor: '#07c160',
+        backgroundColor: 'rgba(7,193,96,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 20, font: { size: 10 } }, grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: '#f0f0f0' } }
+      },
+      interaction: { intersect: false, mode: 'index' }
+    }
+  });
+  document.getElementById('dailyChart').parentElement.style.height = '320px';
+}
+
+function renderPersonChart(stats) {
+  const senders = Object.keys(stats.senders).sort((a,b) => stats.senders[b].count - stats.senders[a].count);
+  destroyChart('personChart');
+  const ctx = document.getElementById('personChart').getContext('2d');
+  const colors = ['#07c160','#576b95','#f5a623','#e74c3c','#1abc9c','#9b59b6','#3498db','#e67e22','#2ecc71','#e91e63'];
+  charts.person = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: senders,
+      datasets: [{
+        label: '消息数',
+        data: senders.map(s => stats.senders[s].count),
+        backgroundColor: senders.map((_,i) => colors[i % colors.length]),
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, grid: { color: '#f0f0f0' } },
+        y: { grid: { display: false }, ticks: { font: { size: 12 } } }
+      }
+    }
+  });
+  document.getElementById('personChart').parentElement.style.height = '320px';
+}
+
+function renderHourlyChart(stats) {
+  destroyChart('hourlyChart');
+  const ctx = document.getElementById('hourlyChart').getContext('2d');
+  const maxVal = Math.max(...stats.hourly);
+  const bgColors = stats.hourly.map(v => {
+    const alpha = 0.3 + (v / maxVal) * 0.7;
+    return `rgba(7,193,96,${alpha})`;
+  });
+  charts.hourly = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: Array.from({length:24}, (_,i) => `${i}:00`),
+      datasets: [{
+        data: stats.hourly,
+        backgroundColor: bgColors,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+        y: { beginAtZero: true, grid: { color: '#f0f0f0' } }
+      }
+    }
+  });
+  document.getElementById('hourlyChart').parentElement.style.height = '320px';
+}
+
+function renderWeeklyChart(stats) {
+  destroyChart('weeklyChart');
+  const ctx = document.getElementById('weeklyChart').getContext('2d');
+  charts.weekly = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: weekLabels,
+      datasets: [{
+        data: stats.weekly,
+        backgroundColor: ['rgba(7,193,96,0.7)','rgba(7,193,96,0.5)','rgba(7,193,96,0.5)','rgba(7,193,96,0.5)','rgba(7,193,96,0.5)','rgba(7,193,96,0.5)','rgba(7,193,96,0.5)'],
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: '#f0f0f0' } }
+      }
+    }
+  });
+  document.getElementById('weeklyChart').parentElement.style.height = '320px';
+}
+
+function renderKeywords(stats) {
+  const sorted = Object.entries(stats.words).sort((a,b) => b[1] - a[1]).slice(0, 60);
+  const html = sorted.map(([w,c]) => `<span class="keyword-tag">${w}<span class="count">${c}</span></span>`).join('');
+  document.getElementById('keywordList').innerHTML = html || '<span style="color:#ccc;">暂无高频词数据</span>';
+}
+
+function renderEmojis(stats) {
+  const sorted = Object.entries(stats.emojis).sort((a,b) => b[1] - a[1]).slice(0, 30);
+  const html = sorted.map(([e,c]) => `<div class="emoji-item">${e}<span class="ec">${c}次</span></div>`).join('');
+  document.getElementById('emojiList').innerHTML = html || '<span style="color:#ccc;">未检测到Emoji</span>';
+}
+
+function renderPersonTable(stats) {
+  const senders = Object.keys(stats.senders).sort((a,b) => stats.senders[b].count - stats.senders[a].count);
+  const total = allMessages.length;
+  const html = senders.map(s => {
+    const d = stats.senders[s];
+    const pct = ((d.count / total) * 100).toFixed(1);
+    const avgLen = Math.round(d.totalLen / d.count);
+    const first = d.first ? toDateStr(d.first) + ' ' + String(d.first.getHours()).padStart(2,'0')+':'+String(d.first.getMinutes()).padStart(2,'0') : '-';
+    const last = d.last ? toDateStr(d.last) + ' ' + String(d.last.getHours()).padStart(2,'0')+':'+String(d.last.getMinutes()).padStart(2,'0') : '-';
+    return `<tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #f5f5f5;font-weight:500;">${s}</td>
+      <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;color:#07c160;font-weight:600;">${d.count.toLocaleString()}</td>
+      <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;">${pct}%</td>
+      <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;">${avgLen}字</td>
+      <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;">${d.images}</td>
+      <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;font-size:12px;color:#999;">${first}</td>
+      <td style="padding:10px 12px;text-align:right;border-bottom:1px solid #f5f5f5;font-size:12px;color:#999;">${last}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('personTableBody').innerHTML = html;
+}
+
+function renderMessages(stats) {
+  const senders = Object.keys(stats.senders);
+  const sel = document.getElementById('personFilter');
+  sel.innerHTML = '<option value="">全部发言人</option>' + senders.map(s => `<option value="${s}">${s}</option>`).join('');
+  
+  renderMsgList();
+  
+  document.getElementById('searchInput').addEventListener('input', renderMsgList);
+  sel.addEventListener('change', renderMsgList);
+}
+
+function renderMsgList() {
+  const query = document.getElementById('searchInput').value.toLowerCase();
+  const person = document.getElementById('personFilter').value;
+  
+  let filtered = allMessages;
+  if (person) filtered = filtered.filter(m => m.sender === person);
+  if (query) filtered = filtered.filter(m => m.content.toLowerCase().includes(query));
+  
+  const recent = filtered.slice(-500).reverse();
+  const html = recent.map(m => `
+    <div class="msg-item">
+      <span class="msg-time">${toDateStr(m.time)} ${String(m.time.getHours()).padStart(2,'0')}:${String(m.time.getMinutes()).padStart(2,'0')}</span>
+      <span class="msg-sender">${m.sender}</span>
+      <span class="msg-content">${escapeHtml(m.content)}</span>
+    </div>
+  `).join('');
+  
+  document.getElementById('msgList').innerHTML = html || '<div class="empty-state">没有匹配的消息</div>';
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>
